@@ -51,7 +51,7 @@ CORS(app, resources={
 
 class Config:
     """Application configuration"""
-    DATA_FILE = os.path.join('data', 'apps.json')
+    DATA_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'apps.json'))
     API_VERSION = '1.0.0'
     API_NAME = 'DroidX'
     MAX_SEARCH_RESULTS = None
