@@ -1,0 +1,17 @@
+{
+  "functions": {
+    "api/*.py": {
+      "runtime": "python3.9"
+    }
+  },
+  "rewrites": [
+    { "source": "/apps", "destination": "/api/apps" },
+    { "source": "/apps/(.*)", "destination": "/api/apps/$1" },
+    { "source": "/search", "destination": "/api/search" },
+    { "source": "/categories", "destination": "/api/categories" },
+    { "source": "/categories/(.*)", "destination": "/api/categories/$1" },
+    { "source": "/random", "destination": "/api/random" },
+    { "source": "/latest", "destination": "/api/latest" },
+    { "source": "/stats", "destination": "/api/stats" }
+  ]
+}
