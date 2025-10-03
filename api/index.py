@@ -51,7 +51,8 @@ CORS(app, resources={
 
 class Config:
     """Application configuration"""
-    DATA_FILE = os.path.join('data', 'apps.json')
+    # Use absolute path for data file to work in serverless environment
+    DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'apps.json')
     API_VERSION = '1.0.0'
     API_NAME = 'DroidX'
     MAX_SEARCH_RESULTS = None
@@ -837,20 +838,9 @@ def get_stats():
 # VERCEL SERVERLESS HANDLER
 # =============================================================================
 
-def handler(environ, start_response):
-    """
-    Vercel serverless function handler.
-    
-    Args:
-        environ: WSGI environment
-        start_response: WSGI start_response callable
-        
-    Returns:
-        Response iterator
-    """
-    with app.request_context(environ):
-        response = app.full_dispatch_request()
-        return response(environ, start_response)
+# Export the Flask app for Vercel's Python runtime
+# Vercel automatically detects and uses the 'app' variable
+# No additional handler wrapper is needed
 
 
 # =============================================================================
