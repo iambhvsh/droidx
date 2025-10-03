@@ -1,0 +1,160 @@
+name: Daily F-Droid Data Update
+
+on:
+  schedule:
+    # Runs daily at midnight UTC (00:00)
+    - cron: '0 0 * * *'
+  
+  # Allow manual triggering from GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      force_update:
+        description: 'Force update even if no changes'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  update-fdroid-data:
+    name: Update F-Droid Repository Data
+    runs-on: ubuntu-latest
+    
+    steps:
+      # ================================================================
+      # STEP 1: Checkout Repository
+      # ================================================================
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      # ================================================================
+      # STEP 2: Setup Python Environment
+      # ================================================================
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      # ================================================================
+      # STEP 3: Install Dependencies
+      # ================================================================
+      - name: 📦 Install dependencies
+        run: |
+          echo "Installing Python dependencies..."
+          python -m pip install --upgrade pip
+          pip install requests
+          echo "✅ Dependencies installed successfully"
+      
+      # ================================================================
+      # STEP 4: Create Data Directory
+      # ================================================================
+      - name: 📁 Create data directory
+        run: |
+          echo "Creating data directory if it doesn't exist..."
+          mkdir -p data
+          echo "✅ Data directory ready"
+      
+      # ================================================================
+      # STEP 5: Backup Existing Data (if exists)
+      # ================================================================
+      - name: 💾 Backup existing data
+        id: backup
+        run: |
+          if [ -f "data/apps.json" ]; then
+            echo "Creating backup of existing data..."
+            cp data/apps.json data/apps.json.backup
+            BACKUP_SIZE=$(du -h data/apps.json.backup | cut -f1)
+            echo "backup_created=true" >> $GITHUB_OUTPUT
+            echo "backup_size=$BACKUP_SIZE" >> $GITHUB_OUTPUT
+            echo "✅ Backup created: $BACKUP_SIZE"
+          else
+            echo "backup_created=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  No existing data file to backup"
+          fi
+      
+      # ================================================================
+      # STEP 6: Delete Old Data File
+      # ================================================================
+      - name: 🗑️ Delete old data file
+        run: |
+          if [ -f "data/apps.json" ]; then
+            echo "Deleting old data file..."
+            rm -f data/apps.json
+            echo "✅ Old data file deleted"
+          else
+            echo "ℹ️  No old data file to delete"
+          fi
+      
+      # ================================================================
+      # STEP 7: Download and Process F-Droid Data
+      # ================================================================
+      - name: ⬇️ Download and process F-Droid index
+        id: download
+        run: |
+          echo "Starting F-Droid data download and processing..."
+          echo "=================================================="
+          
+          START_TIME=$(date +%s)
+          
+          python scripts/update_data.py
+          
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          
+          echo "duration=$DURATION" >> $GITHUB_OUTPUT
+          echo "✅ Download and processing completed in ${DURATION}s"
+      
+      # ================================================================
+      # STEP 8: Verify Downloaded Data
+      # ================================================================
+      - name: ✅ Verify data integrity
+        id: verify
+        run: |
+          if [ ! -f "data/apps.json" ]; then
+            echo "❌ ERROR: Data file was not created!"
+            exit 1
+          fi
+          
+          # Get file info
+          FILE_SIZE=$(du -h data/apps.json | cut -f1)
+          FILE_SIZE_BYTES=$(stat -f%z data/apps.json 2>/dev/null || stat -c%s data/apps.json)
+          
+          # Validate JSON
+          if ! python -c "import json; json.load(open('data/apps.json'))" 2>/dev/null; then
+            echo "❌ ERROR: Invalid JSON in data file!"
+            if [ -f "data/apps.json.backup" ]; then
+              echo "Restoring from backup..."
+              mv data/apps.json.backup data/apps.json
+            fi
+            exit 1
+          fi
+          
+          # Get app count
+          APPS_COUNT=$(python -c "import json; print(len(json.load(open('data/apps.json'))['apps']))")
+          
+          # Validate app count
+          if [ "$APPS_COUNT" -lt 100 ]; then
+            echo "⚠️  WARNING: Suspiciously low app count: $APPS_COUNT"
+            if [ -f "data/apps.json.backup" ]; then
+              echo "Restoring from backup..."
+              mv data/apps.json.backup data/apps.json
+              exit 1
+            fi
+          fi
+          
+          echo "file_size=$FILE_SIZE" >> $GITHUB_OUTPUT
+          echo "file_size_bytes=$FILE_SIZE_BYTES" >> $GITHUB_OUTPUT
+          echo "apps_count=$APPS_COUNT" >> $GITHUB_OUTPUT
+          
+          echo "=================================================="
+          echo "✅ Data verification successful"
+          echo "   File size: $FILE_SIZE ($FILE_SIZE_BYTES bytes)"
+          echo "   Apps count: $APPS_COUNT"
+          echo "=================================================="
