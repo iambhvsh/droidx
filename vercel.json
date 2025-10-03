@@ -2,24 +2,24 @@
   "version": 2,
   "builds": [
     {
-      "src": "api.py",
-      "use": "@vercel/python"
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxDuration": 30,
+        "memory": 1024
+      }
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "api.py"
+      "dest": "api/index.py"
     }
   ],
   "env": {
     "PYTHONUNBUFFERED": "1"
   },
-  "regions": ["iad1"],
-  "functions": {
-    "api.py": {
-      "memory": 1024,
-      "maxDuration": 30
-    }
-  }
+  "regions": [
+    "iad1"
+  ]
 }
