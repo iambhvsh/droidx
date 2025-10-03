@@ -1,7 +1,7 @@
 # This workflow runs daily to fetch the latest F-Droid repository data,
 # processes it, and commits it to the repository if changes are detected.
 
-name: Daily F-Droid Data Update
+name: Fetch data daily from Fdroid
 
 on:
   schedule:
@@ -126,5 +126,4 @@ jobs:
             echo "✅ Changes committed and pushed successfully. Apps added: $ADDED, removed: $REMOVED, total: $NEW_COUNT"
           else
             echo "No changes detected and force update not requested. Skipping commit/push."
-          fi # <-- FIX: This was the missing closing 'fi' for the 'if' block.
-
+          fi
