@@ -4,8 +4,6 @@ on:
   schedule:
     # Runs daily at midnight UTC (00:00)
     - cron: '0 0 * * *'
-  
-  # Allow manual triggering from GitHub Actions tab
   workflow_dispatch:
     inputs:
       force_update:
@@ -22,139 +20,104 @@ jobs:
   update-fdroid-data:
     name: Update F-Droid Repository Data
     runs-on: ubuntu-latest
-    
+
     steps:
-      # ================================================================
       # STEP 1: Checkout Repository
-      # ================================================================
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-      
-      # ================================================================
-      # STEP 2: Setup Python Environment
-      # ================================================================
+
+      # STEP 2: Setup Python
       - name: 🐍 Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
-      # ================================================================
+
       # STEP 3: Install Dependencies
-      # ================================================================
       - name: 📦 Install dependencies
         run: |
-          echo "Installing Python dependencies..."
           python -m pip install --upgrade pip
           pip install requests
-          echo "✅ Dependencies installed successfully"
-      
-      # ================================================================
+
       # STEP 4: Create Data Directory
-      # ================================================================
       - name: 📁 Create data directory
-        run: |
-          echo "Creating data directory if it doesn't exist..."
-          mkdir -p data
-          echo "✅ Data directory ready"
-      
-      # ================================================================
-      # STEP 5: Backup Existing Data (if exists)
-      # ================================================================
-      - name: 💾 Backup existing data
-        id: backup
+        run: mkdir -p data
+
+      # STEP 5: Record previous app IDs
+      - name: 📝 Get previous app IDs
+        id: prev_apps
         run: |
           if [ -f "data/apps.json" ]; then
-            echo "Creating backup of existing data..."
-            cp data/apps.json data/apps.json.backup
-            BACKUP_SIZE=$(du -h data/apps.json.backup | cut -f1)
-            echo "backup_created=true" >> $GITHUB_OUTPUT
-            echo "backup_size=$BACKUP_SIZE" >> $GITHUB_OUTPUT
-            echo "✅ Backup created: $BACKUP_SIZE"
+            python -c "import json; apps=json.load(open('data/apps.json'))['apps']; print(' '.join([a['id'] for a in apps]))" > prev_ids.txt
           else
-            echo "backup_created=false" >> $GITHUB_OUTPUT
-            echo "ℹ️  No existing data file to backup"
+            touch prev_ids.txt
           fi
-      
-      # ================================================================
-      # STEP 6: Delete Old Data File
-      # ================================================================
-      - name: 🗑️ Delete old data file
-        run: |
-          if [ -f "data/apps.json" ]; then
-            echo "Deleting old data file..."
-            rm -f data/apps.json
-            echo "✅ Old data file deleted"
-          else
-            echo "ℹ️  No old data file to delete"
-          fi
-      
-      # ================================================================
-      # STEP 7: Download and Process F-Droid Data
-      # ================================================================
+
+      # STEP 6: Download and Process F-Droid Data
       - name: ⬇️ Download and process F-Droid index
-        id: download
-        run: |
-          echo "Starting F-Droid data download and processing..."
-          echo "=================================================="
-          
-          START_TIME=$(date +%s)
-          
-          python scripts/update_data.py
-          
-          END_TIME=$(date +%s)
-          DURATION=$((END_TIME - START_TIME))
-          
-          echo "duration=$DURATION" >> $GITHUB_OUTPUT
-          echo "✅ Download and processing completed in ${DURATION}s"
-      
-      # ================================================================
-      # STEP 8: Verify Downloaded Data
-      # ================================================================
+        run: python scripts/update_data.py
+
+      # STEP 7: Verify Data Integrity and get new app IDs
       - name: ✅ Verify data integrity
         id: verify
         run: |
-          if [ ! -f "data/apps.json" ]; then
-            echo "❌ ERROR: Data file was not created!"
+          FILE="data/apps.json"
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: $FILE not found!"
             exit 1
           fi
-          
-          # Get file info
-          FILE_SIZE=$(du -h data/apps.json | cut -f1)
-          FILE_SIZE_BYTES=$(stat -f%z data/apps.json 2>/dev/null || stat -c%s data/apps.json)
-          
-          # Validate JSON
-          if ! python -c "import json; json.load(open('data/apps.json'))" 2>/dev/null; then
-            echo "❌ ERROR: Invalid JSON in data file!"
+
+          python -c "import json; json.load(open('$FILE'))" || exit 1
+
+          python -c "import json; apps=json.load(open('$FILE'))['apps']; print(' '.join([a['id'] for a in apps]))" > new_ids.txt
+
+          NEW_COUNT=$(wc -w < new_ids.txt)
+          echo "new_count=$NEW_COUNT" >> $GITHUB_OUTPUT
+          echo "New apps count: $NEW_COUNT"
+
+      # STEP 8: Calculate added/removed apps
+      - name: 📊 Calculate changes
+        id: changes
+        run: |
+          PREV_IDS=$(cat prev_ids.txt)
+          NEW_IDS=$(cat new_ids.txt)
+
+          ADDED=$(comm -13 <(echo "$PREV_IDS" | tr ' ' '\n' | sort) <(echo "$NEW_IDS" | tr ' ' '\n' | sort) | wc -l)
+          REMOVED=$(comm -23 <(echo "$PREV_IDS" | tr ' ' '\n' | sort) <(echo "$NEW_IDS" | tr ' ' '\n' | sort) | wc -l)
+
+          echo "apps_added=$ADDED" >> $GITHUB_OUTPUT
+          echo "apps_removed=$REMOVED" >> $GITHUB_OUTPUT
+          echo "Apps added: $ADDED, Apps removed: $REMOVED"
+
+      # STEP 9: Commit & Push Updates (with force update and counts)
+      - name: 💾 Commit & push updates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/apps.json
+
+          CHANGES_DETECTED=$(git diff --cached --quiet || echo "yes")
+          FORCE_UPDATE=${{ github.event.inputs.force_update || 'false' }}
+          NEW_COUNT=${{ steps.verify.outputs.new_count }}
+          ADDED=${{ steps.changes.outputs.apps_added }}
+          REMOVED=${{ steps.changes.outputs.apps_removed }}
+
+          if [ "$CHANGES_DETECTED" = "yes" ] || [ "$FORCE_UPDATE" = "true" ]; then
+            # Backup old data if exists
             if [ -f "data/apps.json.backup" ]; then
-              echo "Restoring from backup..."
-              mv data/apps.json.backup data/apps.json
+              rm -f data/apps.json.backup
             fi
-            exit 1
-          fi
-          
-          # Get app count
-          APPS_COUNT=$(python -c "import json; print(len(json.load(open('data/apps.json'))['apps']))")
-          
-          # Validate app count
-          if [ "$APPS_COUNT" -lt 100 ]; then
-            echo "⚠️  WARNING: Suspiciously low app count: $APPS_COUNT"
-            if [ -f "data/apps.json.backup" ]; then
-              echo "Restoring from backup..."
-              mv data/apps.json.backup data/apps.json
-              exit 1
+            if [ -f "data/apps.json" ]; then
+              cp data/apps.json data/apps.json.backup
+              echo "Backup of previous data created."
             fi
-          fi
-          
-          echo "file_size=$FILE_SIZE" >> $GITHUB_OUTPUT
-          echo "file_size_bytes=$FILE_SIZE_BYTES" >> $GITHUB_OUTPUT
-          echo "apps_count=$APPS_COUNT" >> $GITHUB_OUTPUT
-          
-          echo "=================================================="
-          echo "✅ Data verification successful"
-          echo "   File size: $FILE_SIZE ($FILE_SIZE_BYTES bytes)"
-          echo "   Apps count: $APPS_COUNT"
-          echo "=================================================="
+
+            git commit -m "Daily F-Droid update: $(date -u +"%Y-%m-%d %H:%M:%SZ") | Apps: +$ADDED/-$REMOVED | Total: $NEW_COUNT"
+            git push origin main
+            echo "✅ Changes committed and pushed successfully. Apps added: $ADDED, removed: $REMOVED, total: $NEW_COUNT"
+          else
+            echo "No changes detected and force update not requested. Skipping commit/push."
