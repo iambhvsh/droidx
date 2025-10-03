@@ -35,36 +35,43 @@ jobs:
 
       - name: 📦 Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          set -euo pipefail
+          python3 -m pip install --upgrade pip
           pip install requests
 
       - name: 📁 Create data directory
-        run: mkdir -p data
+        run: |
+          set -euo pipefail
+          mkdir -p data
 
       - name: 📝 Get previous app IDs
         id: prev_apps
         run: |
+          set -euo pipefail
           if [ -f "data/apps.json" ]; then
-            python -c "import json; apps=json.load(open('data/apps.json'))['apps']; print(' '.join([a['id'] for a in apps]))" > prev_ids.txt
+            python3 -c "import json; apps=json.load(open('data/apps.json'))['apps']; print(' '.join([a['id'] for a in apps]))" > prev_ids.txt
           else
-            touch prev_ids.txt
+            > prev_ids.txt
           fi
 
       - name: ⬇️ Download and process F-Droid index
-        run: python scripts/update_data.py
+        run: |
+          set -euo pipefail
+          python3 scripts/update_data.py
 
       - name: ✅ Verify data integrity
         id: verify
         run: |
+          set -euo pipefail
           FILE="data/apps.json"
           if [ ! -f "$FILE" ]; then
             echo "ERROR: $FILE not found!"
             exit 1
           fi
 
-          python -c "import json; json.load(open('$FILE'))" || exit 1
+          python3 -c "import json; json.load(open('$FILE'))" || exit 1
 
-          python -c "import json; apps=json.load(open('$FILE'))['apps']; print(' '.join([a['id'] for a in apps]))" > new_ids.txt
+          python3 -c "import json; apps=json.load(open('$FILE'))['apps']; print(' '.join([a['id'] for a in apps]))" > new_ids.txt
 
           NEW_COUNT=$(wc -w < new_ids.txt)
           echo "new_count=$NEW_COUNT" >> $GITHUB_OUTPUT
@@ -73,11 +80,12 @@ jobs:
       - name: 📊 Calculate changes
         id: changes
         run: |
-          PREV_IDS=$(cat prev_ids.txt)
-          NEW_IDS=$(cat new_ids.txt)
+          set -euo pipefail
+          PREV_IDS=$(cat prev_ids.txt || true)
+          NEW_IDS=$(cat new_ids.txt || true)
 
-          ADDED=$(comm -13 <(echo "$PREV_IDS" | tr ' ' '\n' | sort) <(echo "$NEW_IDS" | tr ' ' '\n' | sort) | wc -l)
-          REMOVED=$(comm -23 <(echo "$PREV_IDS" | tr ' ' '\n' | sort) <(echo "$NEW_IDS" | tr ' ' '\n' | sort) | wc -l)
+          ADDED=$(comm -13 <(echo "$PREV_IDS" | tr ' ' '\n' | sort) <(echo "$NEW_IDS" | tr ' ' '\n' | sort) | wc -l || true)
+          REMOVED=$(comm -23 <(echo "$PREV_IDS" | tr ' ' '\n' | sort) <(echo "$NEW_IDS" | tr ' ' '\n' | sort) | wc -l || true)
 
           echo "apps_added=$ADDED" >> $GITHUB_OUTPUT
           echo "apps_removed=$REMOVED" >> $GITHUB_OUTPUT
@@ -85,16 +93,17 @@ jobs:
 
       - name: 💾 Commit & push updates
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add data/apps.json
 
           CHANGES_DETECTED=$(git diff --cached --quiet || echo "yes")
-          FORCE_UPDATE=${{ github.event.inputs.force_update || 'false' }}
-          NEW_COUNT=${{ steps.verify.outputs.new_count }}
-          ADDED=${{ steps.changes.outputs.apps_added }}
-          REMOVED=${{ steps.changes.outputs.apps_removed }}
+          FORCE_UPDATE="${{ github.event.inputs.force_update || 'false' }}"
+          NEW_COUNT="${{ steps.verify.outputs.new_count }}"
+          ADDED="${{ steps.changes.outputs.apps_added }}"
+          REMOVED="${{ steps.changes.outputs.apps_removed }}"
 
           if [ "$CHANGES_DETECTED" = "yes" ] || [ "$FORCE_UPDATE" = "true" ]; then
             if [ -f "data/apps.json.backup" ]; then
