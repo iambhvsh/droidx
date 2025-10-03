@@ -2,7 +2,6 @@ name: Daily F-Droid Data Update
 
 on:
   schedule:
-    # Runs daily at midnight UTC (00:00)
     - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
@@ -22,31 +21,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # STEP 1: Checkout Repository
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      # STEP 2: Setup Python
       - name: 🐍 Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      # STEP 3: Install Dependencies
       - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
-      # STEP 4: Create Data Directory
       - name: 📁 Create data directory
         run: mkdir -p data
 
-      # STEP 5: Record previous app IDs
       - name: 📝 Get previous app IDs
         id: prev_apps
         run: |
@@ -56,11 +50,9 @@ jobs:
             touch prev_ids.txt
           fi
 
-      # STEP 6: Download and Process F-Droid Data
       - name: ⬇️ Download and process F-Droid index
         run: python scripts/update_data.py
 
-      # STEP 7: Verify Data Integrity and get new app IDs
       - name: ✅ Verify data integrity
         id: verify
         run: |
@@ -78,7 +70,6 @@ jobs:
           echo "new_count=$NEW_COUNT" >> $GITHUB_OUTPUT
           echo "New apps count: $NEW_COUNT"
 
-      # STEP 8: Calculate added/removed apps
       - name: 📊 Calculate changes
         id: changes
         run: |
@@ -92,7 +83,6 @@ jobs:
           echo "apps_removed=$REMOVED" >> $GITHUB_OUTPUT
           echo "Apps added: $ADDED, Apps removed: $REMOVED"
 
-      # STEP 9: Commit & Push Updates (with force update and counts)
       - name: 💾 Commit & push updates
         run: |
           git config user.name "github-actions[bot]"
@@ -107,7 +97,6 @@ jobs:
           REMOVED=${{ steps.changes.outputs.apps_removed }}
 
           if [ "$CHANGES_DETECTED" = "yes" ] || [ "$FORCE_UPDATE" = "true" ]; then
-            # Backup old data if exists
             if [ -f "data/apps.json.backup" ]; then
               rm -f data/apps.json.backup
             fi
