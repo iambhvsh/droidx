@@ -1,26 +1,11 @@
 {
-  "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxDuration": 30,
-        "memory": 1024,
-        "includeFiles": "data/apps.json"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "api/index.py"
+      "source": "/(.*)",
+      "destination": "/api/index"
     }
   ],
   "env": {
     "PYTHONUNBUFFERED": "1"
-  },
-  "regions": [
-    "iad1"
-  ]
+  }
 }

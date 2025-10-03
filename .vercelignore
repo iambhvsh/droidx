@@ -1,0 +1,12 @@
+# Vercel ignore file
+__pycache__
+*.pyc
+.git
+.github
+.venv
+venv
+ENV
+scripts
+README.md
+*.md
+.gitignore

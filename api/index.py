@@ -51,7 +51,9 @@ CORS(app, resources={
 
 class Config:
     """Application configuration"""
-    DATA_FILE = os.path.join('data', 'apps.json')
+    # Use absolute path for Vercel serverless environment
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    DATA_FILE = os.path.join(BASE_DIR, 'data', 'apps.json')
     API_VERSION = '1.0.0'
     API_NAME = 'DroidX'
     MAX_SEARCH_RESULTS = None
@@ -90,8 +92,16 @@ class DataStore:
             JSONDecodeError: If data file is not valid JSON
         """
         try:
+            logger.info(f"Attempting to load data from: {self.data_file}")
+            logger.info(f"Current working directory: {os.getcwd()}")
+            logger.info(f"File exists: {os.path.exists(self.data_file)}")
+            
             if not os.path.exists(self.data_file):
                 logger.error(f"Data file not found: {self.data_file}")
+                # List files in data directory for debugging
+                data_dir = os.path.dirname(self.data_file)
+                if os.path.exists(data_dir):
+                    logger.info(f"Files in {data_dir}: {os.listdir(data_dir)}")
                 raise FileNotFoundError(f"Data file not found: {self.data_file}")
             
             with open(self.data_file, 'r', encoding='utf-8') as f:
@@ -837,20 +847,8 @@ def get_stats():
 # VERCEL SERVERLESS HANDLER
 # =============================================================================
 
-def handler(environ, start_response):
-    """
-    Vercel serverless function handler.
-    
-    Args:
-        environ: WSGI environment
-        start_response: WSGI start_response callable
-        
-    Returns:
-        Response iterator
-    """
-    with app.request_context(environ):
-        response = app.full_dispatch_request()
-        return response(environ, start_response)
+# For Vercel serverless deployment, the Flask app is automatically used.
+# No custom handler is needed - Vercel's Python runtime handles WSGI apps directly.
 
 
 # =============================================================================
