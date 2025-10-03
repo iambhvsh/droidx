@@ -8,6 +8,7 @@ import requests
 import xml.etree.ElementTree as ET
 import json
 import sys
+import os
 from datetime import datetime
 
 # F-Droid repository URLs
@@ -15,8 +16,9 @@ FDROID_REPO_URL = "https://f-droid.org/repo"
 FDROID_INDEX_URL = f"{FDROID_REPO_URL}/index.xml"
 FDROID_ICON_BASE = f"{FDROID_REPO_URL}/icons-640"
 
-# Output file
-CACHE_FILE = "fdroid_index_cache.json"
+# Output file and directory (FIXED: output path now matches workflow expectation)
+CACHE_DIR = "data"
+CACHE_FILE = os.path.join(CACHE_DIR, "apps.json")
 
 def get_text(element, tag):
     """Safely extract text from XML element"""
@@ -113,6 +115,9 @@ def fetch_and_parse_fdroid_index():
 def save_cache(apps_data):
     """Save parsed data to JSON file"""
     print(f"Saving cache to {CACHE_FILE}...")
+
+    # Ensure the data directory exists (FIXED)
+    os.makedirs(CACHE_DIR, exist_ok=True)
     
     cache_data = {
         'last_updated': datetime.utcnow().isoformat() + 'Z',
@@ -124,7 +129,6 @@ def save_cache(apps_data):
         with open(CACHE_FILE, 'w', encoding='utf-8') as f:
             json.dump(cache_data, f, ensure_ascii=False, separators=(',', ':'))
         
-        import os
         file_size = os.path.getsize(CACHE_FILE)
         file_size_mb = file_size / (1024 * 1024)
         
