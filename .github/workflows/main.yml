@@ -1,7 +1,11 @@
+# This workflow runs daily to fetch the latest F-Droid repository data,
+# processes it, and commits it to the repository if changes are detected.
+
 name: Daily F-Droid Data Update
 
 on:
   schedule:
+    # Runs every day at midnight UTC.
     - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
@@ -69,8 +73,10 @@ jobs:
             exit 1
           fi
 
+          # Verify that the file is valid JSON
           python3 -c "import json; json.load(open('$FILE'))" || exit 1
 
+          # Extract new app IDs for comparison
           python3 -c "import json; apps=json.load(open('$FILE'))['apps']; print(' '.join([a['id'] for a in apps]))" > new_ids.txt
 
           NEW_COUNT=$(wc -w < new_ids.txt)
@@ -84,6 +90,7 @@ jobs:
           PREV_IDS=$(cat prev_ids.txt || true)
           NEW_IDS=$(cat new_ids.txt || true)
 
+          # Use comm to find added and removed apps
           ADDED=$(comm -13 <(echo "$PREV_IDS" | tr ' ' '\n' | sort) <(echo "$NEW_IDS" | tr ' ' '\n' | sort) | wc -l || true)
           REMOVED=$(comm -23 <(echo "$PREV_IDS" | tr ' ' '\n' | sort) <(echo "$NEW_IDS" | tr ' ' '\n' | sort) | wc -l || true)
 
@@ -119,3 +126,5 @@ jobs:
             echo "✅ Changes committed and pushed successfully. Apps added: $ADDED, removed: $REMOVED, total: $NEW_COUNT"
           else
             echo "No changes detected and force update not requested. Skipping commit/push."
+          fi # <-- FIX: This was the missing closing 'fi' for the 'if' block.
+
